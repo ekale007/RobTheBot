@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Arm Control - Main</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-robot"></i> ESP8266 Robot Arm Control</h1>
+            <div class="status-indicator">
+                <span class="status-label">Status:</span>
+                <span class="status-dot {% if connected %}connected{% else %}disconnected{% endif %}"></span>
+                <span class="status-text">
+                    {% if connected %}Verbunden mit ESP8266{% else %}Getrennt{% endif %}
+                </span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left: Control Panel -->
+            <div class="control-panel">
+                <h2><i class="fas fa-gamepad"></i> Control Panel</h2>
+                
+                <!-- Emergency Stop -->
+                <div class="emergency-section">
+                    <button class="emergency-btn" onclick="emergencyStop()">
+                        <i class="fas fa-exclamation-triangle"></i> NOT-AUS
+                    </button>
+                </div>
+                
+                <!-- Joint Controls -->
+                <div class="joint-controls">
+                    {% for joint_name, joint_data in position.items() if joint_name != 'led' %}
+                    <div class="joint-card" data-joint="{{ joint_name }}">
+                        <div class="joint-header">
+                            <h3>
+                                <i class="fas fa-{{ 'circle' if joint_name == 'base' else 'arrow-up' if joint_name == 'shoulder' else 'angle-right' if joint_name == 'elbow' else 'hand-paper' if joint_name == 'wrist' else 'hand-rock' }}"></i>
+                                {{ joint_name|title }}
+                            </h3>
+                            <span class="joint-limits">({{ joint_data.min }}° - {{ joint_data.max }}°)</span>
+                        </div>
+                        
+                        <div class="slider-container">
+                            <input type="range" 
+                                   class="joint-slider" 
+                                   min="{{ joint_data.min }}" 
+                                   max="{{ joint_data.max }}" 
+                                   value="{{ joint_data.set }}"
+                                   data-joint="{{ joint_name }}">
+                            
+                            <div class="value-display">
+                                <div class="value-set">
+                                    <span>Set:</span>
+                                    <span class="set-value">{{ joint_data.set }}°</span>
+                                </div>
+                                <div class="value-actual">
+                                    <span>Actual:</span>
+                                    <span class="actual-value">{{ joint_data.actual }}°</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="quick-actions">
+                            <button class="btn-small" onclick="moveToHome('{{ joint_name }}')">
+                                <i class="fas fa-home"></i> Home
+                            </button>
+                            <button class="btn-small" onclick="readActual('{{ joint_name }}')">
+                                <i class="fas fa-sync"></i> Read
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- LED Control -->
+                <div class="led-control">
+                    <h3><i class="fas fa-lightbulb"></i> Onboard LED</h3>
+                    <div class="toggle-switch">
+                        <span>OFF</span>
+                        <label class="switch">
+                            <input type="checkbox" id="ledToggle" {% if position.led %}checked{% endif %}>
+                            <span class="slider round"></span>
+                        </label>
+                        <span>ON</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right: Status and Actions -->
+            <div class="side-panel">
+                <!-- Navigation -->
+                <nav class="nav-menu">
+                    <a href="/" class="nav-link active">
+                        <i class="fas fa-home"></i> Control
+                    </a>
+                    <a href="/simulation" class="nav-link">
+                        <i class="fas fa-desktop"></i> Simulation
+                    </a>
+                    <a href="/calibration" class="nav-link">
+                        <i class="fas fa-tools"></i> Calibration
+                    </a>
+                    <a href="/programs" class="nav-link">
+                        <i class="fas fa-list-alt"></i> Programs
+                    </a>
+                </nav>
+                
+                <!-- Current Position -->
+                <div class="position-display">
+                    <h3><i class="fas fa-map-marker-alt"></i> Current Position</h3>
+                    <div class="position-values">
+                        {% for joint_name, joint_data in position.items() if joint_name != 'led' %}
+                        <div class="position-item">
+                            <span class="joint-label">{{ joint_name|title }}:</span>
+                            <span class="position-value">{{ joint_data.set }}°</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button class="btn-secondary" onclick="saveCurrentPosition()">
+                        <i class="fas fa-save"></i> Save Position
+                    </button>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="quick-actions-panel">
+                    <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                    <button class="btn-action" onclick="moveToHomePosition()">
+                        <i class="fas fa-house-user"></i> Go to Home
+                    </button>
+                    <button class="btn-action" onclick="readAllPositions()">
+                        <i class="fas fa-sync-alt"></i> Read All
+                    </button>
+                    <button class="btn-action" onclick="openSimulation()">
+                        <i class="fas fa-eye"></i> Show 3D View
+                    </button>
+                    <button class="btn-action" onclick="startRecording()">
+                        <i class="fas fa-record-vinyl"></i> Record Program
+                    </button>
+                </div>
+                
+                <!-- System Status -->
+                <div class="system-status">
+                    <h3><i class="fas fa-info-circle"></i> System Status</h3>
+                    <div class="status-items">
+                        <div class="status-item">
+                            <span>ESP8266:</span>
+                            <span class="status-value {% if connected %}ok{% else %}error{% endif %}">
+                                {% if connected %}OK{% else %}OFFLINE{% endif %}
+                            </span>
+                        </div>
+                        <div class="status-item">
+                            <span>Last Update:</span>
+                            <span class="status-value" id="lastUpdate">--:--:--</span>
+                        </div>
+                        <div class="status-item">
+                            <span>Program Running:</span>
+                            <span class="status-value" id="programStatus">None</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Robot Arm Control System v1.0 | Raspberry Pi + ESP8266</p>
+            <div class="footer-links">
+                <a href="#" onclick="showHelp()"><i class="fas fa-question-circle"></i> Help</a>
+                <a href="#" onclick="showSettings()"><i class="fas fa-cog"></i> Settings</a>
+                <a href="#" onclick="showLogs()"><i class="fas fa-clipboard-list"></i> Logs</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
